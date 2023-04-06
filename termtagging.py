@@ -2,6 +2,8 @@ import wikiscrape
 from nltk.corpus import stopwords
 import spacy
 import time
+import proxandfreq as paf
+import random
 
 biofluids = ["Plasma","Serum","Blood","Amniotic Fluid","Ascites","Bile","Breast Milk","Colostrum","Bronchoalveolar Lavage Fluid","Cerebrospinal Fluid","Aqueous Humor","Vitreous Humor","Feces","Fecal water","Paracentesis","Pericardial Fluid","Peritoneal","Interstitial","Lymph","Pleural","Saliva","Semen","Seminal Fluid","Synovial Fluid","Tear","Lacrimal Fluid","Thoracentesis","Urine"]
 colors = ["Clear","Opaque","Translucent","Transparent","White","Off-White","Light Brown","Brown","Dark Brown","Black","Grey","Light Grey","Dark Grey","Turquoise","Red","Light red","Dark red","Scarlet","Yellow","Light yellow","Dark yellow","Magenta","Cyan","Blue","Light blue","Dark blue","Orange","Light orange","Dark orange","Green","Light green","Dark green","Violet","Light violet","Dark violet","Purple","Light purple","Dark purple","Pink","Light pink","Dark pink","Flesh","Gold","Silver","Bronze","Copper"]
@@ -15,12 +17,31 @@ relationships = ['regulates','precursor','potent','converts','regulation','enzym
 def main():
     start = time.perf_counter()
     nlp = spacy.load("en_core_web_sm")
-    text = wikiscrape.get_wiki_words("11-deoxycortisol", False)
+    chemical = "11-deoxycortisol"
+    text = wikiscrape.get_wiki_words(chemical, False)
+    synonyms = ['11-deoxycortisol', 'cortexolone', 'cortodoxone', '17α,21-dihydroxyprogesterone', '17α,21-dihydroxypregn-4-ene-3,20-dione', "substance s", "compound s", "reichstein 's substance s"]
     text = " ".join(text)
     doc = nlp(text)
 
     noun_phrases = [chunk.text for chunk in doc.noun_chunks]
     verbs = [token.lemma_ for token in doc if token.pos_ == "VERB"]
+
+    remove_list = ["=", "( inn", "see", "tadeusz reichstein", "it", "( cortisol", "a single step", "the first report", "upjohn", ]
+    i = 0
+    while i < len(noun_phrases):
+        if (noun_phrases[i].casefold() in remove_list) or (noun_phrases[i].casefold() in synonyms):
+            del noun_phrases[i]
+            i -= 1
+        i+=1
+    noun_phrases.append("cortisol")
+
+    remove_list = ["see", "publish", "have", "know", "discover", "begin", "look", "announce", "explain", "refer", "="]
+    i = 0
+    while i < len(verbs):
+        if (verbs[i].casefold() in remove_list):
+            del verbs[i]
+            i -= 1
+        i+=1
 
     print("Noun phrases: ", noun_phrases)
     print("Verbs: ", verbs)
@@ -56,19 +77,41 @@ def main():
             tagged_words[word] = all_terms[word]
     print(tagged_words)
     k = 0
-    candidate_facts = []
-    for i in range(len(noun_phrases)-1):
+    candidate_facts = {} # key = fact, value = score
+    for i in range(len(noun_phrases)):
         for j in range(len(verbs)):
-            candidate_facts.append(str(noun_phrases[i] + " " + verbs[j] + " " + noun_phrases[i+1]))
-            if (k % 100 == 0):
-                print(candidate_facts[-1])
-            k += 1
-            
-    #print(candidate_facts)
+            candidate_facts[str(chemical + " -> " + verbs[j] + " -> " + noun_phrases[i])] = 1
+    cand_fact2 = []
+    for word in candidate_facts.keys():
+        cand_fact2.append(word)
+    random.shuffle(cand_fact2)
+    for word in cand_fact2:
+        print(word)
+    print(len(cand_fact2))
+
     print("Number of candidate facts: " + str(len(candidate_facts)))
     end = time.perf_counter()
     print("Completed in " + str(end - start) + " seconds.")
-    return tagged_words
+    
+    words_freq = paf.get_word_frequencies(chemical)
+    words_prox = paf.get_word_proximities(chemical, chemical)
+
+    words_list = []
+    for word in words_freq.keys():
+        words_list.append(word)
+    words_str = " ".join(words_list)
+
+    words_doc = nlp(words_str)
+    lemma_words = [token.lemma_ for token in words_doc]
+
+    for word, score in candidate_facts.items(): # loop over each word in the dictionary
+        prox_score = 1
+        for i in range(len(words_prox[word])): # size of list of proximities for each word
+            prox_score += 100 / (words_prox[word][i] +1)
+        candidate_facts[word] *= words_freq[word] + prox_score
+    
+    return candidate_facts
+
 
 '''
 

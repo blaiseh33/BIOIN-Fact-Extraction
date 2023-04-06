@@ -58,7 +58,7 @@ def get_word_proximities(article, keyword):
     # find proximity of <keyword> to each word in text, with a limit of <max_proximity>
     for i in range(len(words)):
         distances = closest_keywords(keyword_indices, i)
-        print("Distances for " + words[i] + ": " + str(distances))
+        #print("Distances for " + words[i] + ": " + str(distances))
         word_prox[words[i]] = distances
 
     return word_prox
